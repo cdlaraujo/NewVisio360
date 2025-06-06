@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<style>
+/* --- layout mínimo --- */
+body{margin:0;background:transparent;display:flex;flex-direction:column;
+     align-items:center;gap:.6rem;font-family:Arial,sans-serif;color:#222}
+.value{font-size:2.4rem;font-weight:700;min-width:140px;text-align:center}
+button{padding:.5rem 1.2rem;border:0;border-radius:8px;font-weight:600;
+       background:#e53e3e;color:#fff;cursor:pointer}
+button.on{background:#2f855a}
+</style>
+</head>
+<body>
+<div id="temp" class="value">-- °C</div>
+<div id="pres" class="value">-- bar</div>
+<div id="flow" class="value">-- L/min</div>
+<button id="pumpBtn">⚡ Ligar bomba</button>
+
+<script>
+/* ======= configurações JSONBin ======= */
+const BIN_KEY='visio360_binId';
+const MASTER ='$2a$10$ehifIomeYlvgvVrxyYhNw.vd4bqTcXj08tw.WEimXjpmizl7wd/tS';
+const ACCESS ='$2a$10$8v56/OHJeikD7qlZWVLOnuZE6wGaC9mv3sAuWg2z9z2HEXa6q9d32';
+const API    ='https://api.jsonbin.io/v3';
+
+let binId = localStorage.getItem(BIN_KEY) || null;
+let pumpOn=false, paused=false, dataLog=[];
+
+/* utilidade */
+const rnd=(mn,mx,d=2)=>+(Math.random()*(mx-mn)+mn).toFixed(d);
+const $=id=>document.getElementById(id);
+
+/* gera ou zera leitura */
+function leitura(){
+  return pumpOn
+    ? {temperature:rnd(20,80), pressure:rnd(1,5), flow_rate:rnd(50,100,1)}
+    : {temperature:'--', pressure:'--', flow_rate:'--'};
+}
+
+/* atualiza DOM */
+function draw(d){
+  $('temp').textContent = d.temperature;
+  $('pres').textContent = d.pressure;
+  $('flow').textContent = d.flow_rate;
+}
+
+/* salva no JSONBin (mesmo código de antes, resumido) */
+async function save(payload){
+  const url  = binId?`${API}/b/${binId}`:`${API}/b`;
+  const opts ={method:binId?'PUT':'POST',headers:{
+          'Content-Type':'application/json','X-Master-Key':MASTER}};
+  if(ACCESS) opts.headers['X-Access-Key']=ACCESS;
+  opts.body=JSON.stringify(payload);
+  const res=await fetch(url,opts);
+  if(!res.ok) throw new Error(res.status);
+  const out=await res.json();
+  if(!binId){binId=out.metadata.id;localStorage.setItem(BIN_KEY,binId);}
+}
+
+/* loop 2 s */
+setInterval(()=>{
+  if(paused) return;
+  const d=leitura();
+  draw(d);
+  if(pumpOn) dataLog.push({...d,timestamp:new Date().toISOString(),pump_status:'on'});
+},2000);
+
+/* sync 10 s */
+setInterval(()=>{if(paused||!pumpOn||!dataLog.length) return;
+  save(dataLog.slice(-10)).catch(console.error);
+},10000);
+
+/* botão */
+$('pumpBtn').onclick=()=>{
+  pumpOn=!pumpOn;
+  const b=$('pumpBtn');
+  b.classList.toggle('on',pumpOn);
+  b.textContent=pumpOn?'⚡ Desligar bomba':'⚡ Ligar bomba';
+  if(!pumpOn) draw(leitura());          // zera leituras
+};
+</script>
+</body>
+</html>
